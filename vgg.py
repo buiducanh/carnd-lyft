@@ -17,7 +17,7 @@ DROPOUT = 0.75
 
 data_dir = './data'
 runs_dir = './runs'
-training_dir ='./lyft_training_data/Train'
+training_dir ='./lyft_training_data'
 vgg_path = './data/vgg'
 
 #--------------------------
@@ -222,9 +222,13 @@ def run():
 
     print("All done!")
 
+def data():
+    helper.maybe_download_lyft_data(training_dir)
+
 #--------------------------
 # MAIN
 #--------------------------
 if __name__ == '__main__':
-    test()
-    # run()
+    # test()
+    run()
+    # data()

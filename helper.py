@@ -6,12 +6,14 @@ import cv2
 import scipy.misc
 import shutil
 import zipfile
+import tarfile
 import time
 import tensorflow as tf
 from glob import glob
 from urllib.request import urlretrieve
 from tqdm import tqdm
 
+import inputs
 
 LIMIT = 10
 
@@ -60,6 +62,35 @@ def maybe_download_pretrained_vgg(data_dir):
         # Remove zip file to save space
         os.remove(os.path.join(vgg_path, vgg_filename))
 
+def maybe_download_lyft_data(data_folder):
+    """
+    Download and extract lyft data if it doesn't exist
+    :param data_dir: Directory to download the data to
+    """
+    lyft_filename = 'lyft_training_data.tar.gz'
+    if not os.path.exists(data_folder):
+        os.makedirs(data_folder)
+        # Download vgg
+        print('Downloading lyft data...')
+        with DLProgress(unit='B', unit_scale=True, miniters=1) as pbar:
+            urlretrieve(
+                'https://s3-us-west-1.amazonaws.com/udacity-selfdrivingcar/Lyft_Challenge/Training+Data/lyft_training_data.tar.gz',
+                os.path.join(data_folder, lyft_filename),
+                pbar.hook)
+
+        # Extract vgg
+        print('Extracting data...')
+        with tarfile.open(os.path.join(data_folder, lyft_filename), 'r') as tar_ref:
+            tar_ref.extractall(data_folder)
+
+        # Remove zip file to save space
+        os.remove(os.path.join(data_folder, lyft_filename))
+
+        print('Prepping data')
+        inputs.prep()
+    else:
+        print('Data exists')
+
 
 def gen_batch_function(data_folder, image_shape):
     """
@@ -68,14 +99,15 @@ def gen_batch_function(data_folder, image_shape):
     :param image_shape: Tuple - Shape of image
     :return:
     """
+    maybe_download_lyft_data(data_folder)
     def get_batches_fn(batch_size):
         """
         Create batches of training data
         :param batch_size: Batch Size
         :return: Batches of training data
         """
-        image_paths = glob(os.path.join(data_folder, 'CameraRGB', '*.png'))
-        label_paths = glob(os.path.join(data_folder, 'CameraPrep', '*.png'))
+        image_paths = glob(os.path.join(data_folder, 'Train', 'CameraRGB', '*.png'))
+        label_paths = glob(os.path.join(data_folder, 'Train', 'CameraPrep', '*.png'))
 
         paths = list(zip(image_paths, label_paths))[:LIMIT]
         random.shuffle(paths)
@@ -107,7 +139,7 @@ def gen_test_output(sess, logits, keep_prob, image_pl, data_folder, image_shape)
     :param image_shape: Tuple - Shape of image
     :return: Output for for each test image
     """
-    for image_file in glob(os.path.join(data_folder, 'CameraRGB', '*.png'))[LIMIT:LIMIT + 2]:
+    for image_file in glob(os.path.join(data_folder, 'Train', 'CameraRGB', '*.png'))[LIMIT:LIMIT + 2]:
         image = cv2.imread(image_file)[:, :, ::-1]
 
         im_softmax = sess.run(

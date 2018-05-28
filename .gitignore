@@ -1,4 +1,5 @@
 *.swp
+*.swo
 data/
 lyft_training_data/
 runs/

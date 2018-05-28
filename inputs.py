@@ -30,8 +30,11 @@ def prep():
     input_path = os.path.abspath(lyft_data_path + "/CameraSeg")
     output_path = os.path.abspath(lyft_data_path + "/CameraPrep")
 
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
+
     for f in os.listdir(input_path):
-        img = scipy.misc.imread(os.path.join(input_path, f), mode = 'RGB')
+        img = cv2.imread(os.path.join(input_path, f))[:, :, ::-1]
         prep_img = preprocess_labels(img)
         scipy.misc.imsave(os.path.join(output_path,f), prep_img)
 
