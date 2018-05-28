@@ -24,8 +24,6 @@ def preprocess_labels(label_image):
     return labels_new
 
 def prep():
-    import scipy.misc
-
     lyft_data_path = "lyft_training_data/Train"
     input_path = os.path.abspath(lyft_data_path + "/CameraSeg")
     output_path = os.path.abspath(lyft_data_path + "/CameraPrep")
@@ -35,8 +33,8 @@ def prep():
 
     for f in os.listdir(input_path):
         img = cv2.imread(os.path.join(input_path, f))[:, :, ::-1]
-        prep_img = preprocess_labels(img)
-        scipy.misc.imsave(os.path.join(output_path,f), prep_img)
+        prep_img = preprocess_labels(img)[:, :, ::-1]
+        cv2.imwrite(os.path.join(output_path,f), prep_img)
 
 
 def poke():

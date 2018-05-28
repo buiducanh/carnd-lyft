@@ -3,7 +3,7 @@ import random
 import numpy as np
 import os.path
 import cv2
-import scipy.misc
+from PIL import Image
 import shutil
 import zipfile
 import tarfile
@@ -11,20 +11,10 @@ import time
 import tensorflow as tf
 from glob import glob
 from urllib.request import urlretrieve
-from tqdm import tqdm
 
 import inputs
 
 LIMIT = 10
-
-class DLProgress(tqdm):
-    last_block = 0
-
-    def hook(self, block_num=1, block_size=1, total_size=None):
-        self.total = total_size
-        self.update((block_num - self.last_block) * block_size)
-        self.last_block = block_num
-
 
 def maybe_download_pretrained_vgg(data_dir):
     """
@@ -47,11 +37,10 @@ def maybe_download_pretrained_vgg(data_dir):
 
         # Download vgg
         print('Downloading pre-trained vgg model...')
-        with DLProgress(unit='B', unit_scale=True, miniters=1) as pbar:
-            urlretrieve(
-                'https://s3-us-west-1.amazonaws.com/udacity-selfdrivingcar/vgg.zip',
-                os.path.join(vgg_path, vgg_filename),
-                pbar.hook)
+        urlretrieve(
+            'https://s3-us-west-1.amazonaws.com/udacity-selfdrivingcar/vgg.zip',
+            os.path.join(vgg_path, vgg_filename))
+
 
         # Extract vgg
         print('Extracting model...')
@@ -72,11 +61,9 @@ def maybe_download_lyft_data(data_folder):
         os.makedirs(data_folder)
         # Download vgg
         print('Downloading lyft data...')
-        with DLProgress(unit='B', unit_scale=True, miniters=1) as pbar:
-            urlretrieve(
-                'https://s3-us-west-1.amazonaws.com/udacity-selfdrivingcar/Lyft_Challenge/Training+Data/lyft_training_data.tar.gz',
-                os.path.join(data_folder, lyft_filename),
-                pbar.hook)
+        urlretrieve(
+            'https://s3-us-west-1.amazonaws.com/udacity-selfdrivingcar/Lyft_Challenge/Training+Data/lyft_training_data.tar.gz',
+            os.path.join(data_folder, lyft_filename))
 
         # Extract vgg
         print('Extracting data...')
@@ -150,14 +137,14 @@ def gen_test_output(sess, logits, keep_prob, image_pl, data_folder, image_shape)
         #road_softmax = im_softmax[0][:, 1].reshape(image_shape[0], image_shape[1])
         road_seg = (result == 1).reshape(image_shape[0], image_shape[1], 1)
         mask_road = np.dot(road_seg, np.array([[0, 255, 0, 127]]))
-        mask_road = scipy.misc.toimage(mask_road, mode="RGBA")
+        mask_road = Image.fromarray(mask_road, mode="RGBA")
 
         # veh_softmax = im_softmax[0][:, 2].reshape(image_shape[0], image_shape[1])
         veh_seg = (result == 2).reshape(image_shape[0], image_shape[1], 1)
         mask_veh = np.dot(veh_seg, np.array([[255, 0, 0, 127]]))
-        mask_veh = scipy.misc.toimage(mask_veh, mode="RGBA")
+        mask_veh = Image.fromarray(mask_veh, mode="RGBA")
 
-        street_im = scipy.misc.toimage(image)
+        street_im = Image.fromarray(image)
         street_im.paste(mask_veh, box=None, mask=mask_veh)
         street_im.paste(mask_road, box=None, mask=mask_road)
 
@@ -180,5 +167,5 @@ def save_inference_samples(runs_dir, data_dir, sess, image_shape, logits, keep_p
     image_outputs = gen_test_output(
         sess, logits, keep_prob, input_image, data_dir, image_shape)
     for name, image, raw_image in image_outputs:
-        scipy.misc.imsave(os.path.join(output_dir, name), image)
-        scipy.misc.imsave(os.path.join(output_dir, "raw_" + name), raw_image)
+        cv2.imwrite(os.path.join(output_dir, name), image[:, :, ::-1])
+        cv2.imwrite(os.path.join(output_dir, "raw_" + name), raw_image[:, :, ::-1])
