@@ -14,8 +14,6 @@ from urllib.request import urlretrieve
 
 import inputs
 
-LIMIT = 10
-
 def maybe_download_pretrained_vgg(data_dir):
     """
     Download and extract pretrained vgg model if it doesn't exist
@@ -96,7 +94,7 @@ def gen_batch_function(data_folder, image_shape):
         image_paths = glob(os.path.join(data_folder, 'Train', 'CameraRGB', '*.png'))
         label_paths = glob(os.path.join(data_folder, 'Train', 'CameraPrep', '*.png'))
 
-        paths = list(zip(image_paths, label_paths))[:LIMIT]
+        paths = list(zip(image_paths, label_paths))# [:LIMIT]
         random.shuffle(paths)
         for batch_i in range(0, len(paths), batch_size):
             images = []
@@ -126,7 +124,7 @@ def gen_test_output(sess, logits, keep_prob, image_pl, data_folder, image_shape)
     :param image_shape: Tuple - Shape of image
     :return: Output for for each test image
     """
-    for image_file in glob(os.path.join(data_folder, 'Train', 'CameraRGB', '*.png'))[LIMIT:LIMIT + 2]:
+    for image_file in glob(os.path.join(data_folder, 'Train', 'CameraRGB', '*.png'))[:10]: # [LIMIT:LIMIT + 2]:
         image = cv2.imread(image_file)[:, :, ::-1]
 
         im_softmax = sess.run(

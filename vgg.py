@@ -3,15 +3,18 @@
 #--------------------------
 
 import tensorflow as tf
+import time
 
+DIVIDER = "============="
 
 # Tune these parameters
 
 NUMBER_OF_CLASSES = 3
 IMAGE_SHAPE = (600, 800)
-EPOCHS = 1
-BATCH_SIZE = 5
+EPOCHS = 40
+BATCH_SIZE = 10
 DROPOUT = 0.75
+SAVE_INTERVAL = BATCH_SIZE * 200
 
 # Specify these directory paths
 
@@ -49,6 +52,9 @@ def load_vgg(sess, vgg_path):
 
 def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
 
+    scaled3 = tf.multiply(vgg_layer3_out, 0.0001, name='vgg_layer3_out_scaled')
+    scaled4 = tf.multiply(vgg_layer4_out, 0.01, name='vgg_layer4_out_scaled')
+
     weights_initializer_stddev = 0.01
     weights_regularized_l2 = 1e-3
     # Convolutional 1x1 to mantain space information.
@@ -68,7 +74,7 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
                                                   kernel_initializer = tf.random_normal_initializer(stddev=weights_initializer_stddev),
                                                   kernel_regularizer= tf.contrib.layers.l2_regularizer(weights_regularized_l2),
                                                   name='first_upsamplex2')
-    conv_1x1_of_4 = tf.layers.conv2d(vgg_layer4_out,
+    conv_1x1_of_4 = tf.layers.conv2d(scaled4,
                                      num_classes,
                                      1, # kernel_size
                                      padding = 'same',
@@ -93,7 +99,7 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
                                                    kernel_initializer = tf.random_normal_initializer(stddev=weights_initializer_stddev),
                                                    kernel_regularizer= tf.contrib.layers.l2_regularizer(weights_regularized_l2),
                                                    name='second_upsamplex2')
-    conv_1x1_of_3 = tf.layers.conv2d(vgg_layer3_out,
+    conv_1x1_of_3 = tf.layers.conv2d(scaled3,
                                      num_classes,
                                      1, # kernel_size
                                      padding = 'same',
@@ -135,26 +141,52 @@ def optimize(nn_last_layer, correct_label, learning_rate, num_classes):
 
   return logits, train_op, loss_op
 
-def train_nn(sess, epochs, batch_size, get_batches_fn, train_op,
+def save_model(sess, saver, start, save_ind):
+  model_name = os.path.join(runs_dir, "model_{}.ckpt".format(save_ind))
+  save_path = saver.save(sess, model_name)
+  print(DIVIDER)
+  print("Saving model to {}".format(save_path))
+  print("TIME elapsed {}...".format(time.time() - start))
+
+def train_nn(saver, sess, epochs, batch_size, get_batches_fn, train_op,
              cross_entropy_loss, input_image,
              correct_label, keep_prob, learning_rate):
 
-  keep_prob_value = 0.5
   learning_rate_value = 0.001
+
+  start = time.time()
+
+  img_cnt = 0
+  save_ind = 0
   for epoch in range(epochs):
+      start_epoch = time.time()
+
       # Create function to get batches
       total_loss = 0
       for X_batch, gt_batch in get_batches_fn(batch_size):
-
           loss, _ = sess.run([cross_entropy_loss, train_op],
           feed_dict={input_image: X_batch, correct_label: gt_batch,
-          keep_prob: keep_prob_value, learning_rate:learning_rate_value})
+          keep_prob: DROPOUT, learning_rate:learning_rate_value})
+          total_loss += loss
 
-          total_loss += loss;
+          img_cnt = (img_cnt + batch_size) % SAVE_INTERVAL
 
+          if img_cnt == 0:
+              save_ind += 1
+              save_model(sess, saver, start, save_ind)
+
+      end_epoch = time.time()
+
+      print(DIVIDER)
       print("EPOCH {} ...".format(epoch + 1))
+      print("Training time: {}".format(end_epoch - start_epoch))
       print("Loss = {:.3f}".format(total_loss))
       print()
+
+  end = time.time()
+  print(DIVIDER)
+  print("Total training time:  {}".format(end - start))
+
 
 import helper
 
@@ -210,7 +242,7 @@ def run():
     print("Model build successful, starting training")
 
     # Train the neural network
-    train_nn(session, EPOCHS, BATCH_SIZE, get_batches_fn,
+    train_nn(saver, session, EPOCHS, BATCH_SIZE, get_batches_fn,
              train_op, cross_entropy_loss, image_input,
              correct_label, keep_prob, learning_rate)
 
