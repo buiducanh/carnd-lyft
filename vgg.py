@@ -4,6 +4,7 @@
 
 import tensorflow as tf
 import time
+import os
 
 DIVIDER = "============="
 
@@ -14,7 +15,7 @@ IMAGE_SHAPE = (600, 800)
 EPOCHS = 40
 BATCH_SIZE = 10
 DROPOUT = 0.75
-SAVE_INTERVAL = BATCH_SIZE * 200
+SAVE_INTERVAL = BATCH_SIZE * 50
 
 # Specify these directory paths
 
@@ -146,7 +147,7 @@ def save_model(sess, saver, start, save_ind):
   save_path = saver.save(sess, model_name)
   print(DIVIDER)
   print("Saving model to {}".format(save_path))
-  print("TIME elapsed {}...".format(time.time() - start))
+  print("TIME elapsed {}...".format(time.time() - start), flush = True)
 
 def train_nn(saver, sess, epochs, batch_size, get_batches_fn, train_op,
              cross_entropy_loss, input_image,
@@ -181,11 +182,11 @@ def train_nn(saver, sess, epochs, batch_size, get_batches_fn, train_op,
       print("EPOCH {} ...".format(epoch + 1))
       print("Training time: {}".format(end_epoch - start_epoch))
       print("Loss = {:.3f}".format(total_loss))
-      print()
+      print(flush = True)
 
   end = time.time()
   print(DIVIDER)
-  print("Total training time:  {}".format(end - start))
+  print("Total training time:  {}".format(end - start), flush = True)
 
 
 import helper
@@ -247,7 +248,7 @@ def run():
              correct_label, keep_prob, learning_rate)
 
     save_path = saver.save(session, runs_dir + '/model.ckpt')
-    print('Model save at {}'.format(save_path))
+    print('Model save at {}'.format(save_path), flush = True)
 
     # Run the model with the test images and save each painted output image (roads painted green)
     helper.save_inference_samples(runs_dir, training_dir, session, IMAGE_SHAPE, logits, keep_prob, image_input)
