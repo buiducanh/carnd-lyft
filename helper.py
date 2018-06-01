@@ -112,6 +112,10 @@ def gen_batch_function(data_folder, image_shape):
             yield np.array(images), np.array(gt_images)
     return get_batches_fn
 
+def layer_predictions(src, predictions):
+    pred_locations = np.sum(predictions, axis = -1)
+    src[pred_locations.nonzero()] = cv2.addWeighted(src[pred_locations.nonzero()], 0.7, predictions[pred_locations.nonzero()], 0.3, 0)
+    return src
 
 def gen_test_output(sess, logits, keep_prob, image_pl, data_folder, image_shape):
     """
@@ -132,26 +136,20 @@ def gen_test_output(sess, logits, keep_prob, image_pl, data_folder, image_shape)
             {keep_prob: 1.0, image_pl: [image]})
 
         result = np.argmax(im_softmax, axis = -1)
-        #road_softmax = im_softmax[0][:, 1].reshape(image_shape[0], image_shape[1])
         road_seg = (result == 1).reshape(image_shape[0], image_shape[1], 1)
-        mask_road = np.dot(road_seg, np.array([[0, 255, 0, 127]]))
-        mask_road = Image.fromarray(mask_road, mode="RGBA")
+        mask_road = np.dot(road_seg, np.array([[0, 255, 0]])).astype('uint8')
 
-        # veh_softmax = im_softmax[0][:, 2].reshape(image_shape[0], image_shape[1])
         veh_seg = (result == 2).reshape(image_shape[0], image_shape[1], 1)
-        mask_veh = np.dot(veh_seg, np.array([[255, 0, 0, 127]]))
-        mask_veh = Image.fromarray(mask_veh, mode="RGBA")
+        mask_veh = np.dot(veh_seg, np.array([[255, 0, 0]])).astype('uint8')
 
-        street_im = Image.fromarray(image)
-        street_im.paste(mask_veh, box=None, mask=mask_veh)
-        street_im.paste(mask_road, box=None, mask=mask_road)
+        street_im = layer_predictions(image, mask_veh)
+        street_im = layer_predictions(street_im, mask_road)
 
         raw_im = np.zeros_like(image)
-        raw_im = raw_im + np.dot(veh_seg, [[255, 0, 0]]) + np.dot(road_seg, [[0, 255, 0]])
+        raw_im = raw_im + mask_road + mask_veh
 
 
         yield os.path.basename(image_file), np.array(street_im), np.array(raw_im)
-
 
 def save_inference_samples(runs_dir, data_dir, sess, image_shape, logits, keep_prob, input_image):
     # Make folder for current run

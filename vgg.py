@@ -2,9 +2,13 @@
 # USER-SPECIFIED DATA
 #--------------------------
 
+import cv2
+import numpy as np
 import tensorflow as tf
 import time
 import os
+from PIL import Image
+import matplotlib.pyplot as plt
 
 DIVIDER = "============="
 
@@ -51,16 +55,210 @@ def load_vgg(sess, vgg_path):
 
   return image_input, keep_prob, layer3, layer4, layer7
 
-def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
+def fcn(bottom):
+    with tf.name_scope('fc6') as scope:
+        kernel = tf.Variable(tf.truncated_normal([7, 7, 512, 4096], dtype=tf.float32,
+                                                 stddev=1e-1), name='weights')
+        tf.nn.l2_loss(kernel)
+        conv = tf.nn.conv2d(bottom, kernel, [1, 1, 1, 1], padding='SAME')
+        biases = tf.Variable(tf.constant(0.0, shape=[4096], dtype=tf.float32),
+                             trainable=True, name='biases')
+        out = tf.nn.bias_add(conv, biases)
+        fcn6 = tf.nn.relu(out)
+        fcn6 = tf.nn.dropout(fcn6, keep_prob = keep_prob)
 
-    scaled3 = tf.multiply(vgg_layer3_out, 0.0001, name='vgg_layer3_out_scaled')
-    scaled4 = tf.multiply(vgg_layer4_out, 0.01, name='vgg_layer4_out_scaled')
+    with tf.name_scope('fc7') as scope:
+        kernel = tf.Variable(tf.truncated_normal([1, 1, 4096, 4096], dtype=tf.float32,
+                                                 stddev=1e-1), name='weights')
+        tf.nn.l2_loss(kernel)
+        conv = tf.nn.conv2d(fcn6, kernel, [1, 1, 1, 1], padding='SAME')
+        biases = tf.Variable(tf.constant(0.0, shape=[4096], dtype=tf.float32),
+                             trainable=True, name='biases')
+        out = tf.nn.bias_add(conv, biases)
+        fcn7 = tf.nn.relu(out)
+        fcn7 = tf.nn.dropout(fcn6, keep_prob = keep_prob)
+    return fcn7
+
+def convlayers():
+    image_input = tf.placeholder(tf.float32, [None, None, None, 3], name = "image_input")
+    # conv1_1
+    with tf.name_scope('conv1_1') as scope:
+        kernel = tf.Variable(tf.truncated_normal([3, 3, 3, 64], dtype=tf.float32,
+                                                 stddev=1e-1), name='filter')
+        conv = tf.nn.conv2d(image_input, kernel, [1, 1, 1, 1], padding='SAME')
+        biases = tf.Variable(tf.constant(0.0, shape=[64], dtype=tf.float32),
+                             trainable=True, name='biases')
+        out = tf.nn.bias_add(conv, biases)
+        conv1_1 = tf.nn.relu(out, name=scope)
+
+    # conv1_2
+    with tf.name_scope('conv1_2') as scope:
+        kernel = tf.Variable(tf.truncated_normal([3, 3, 64, 64], dtype=tf.float32,
+                                                 stddev=1e-1), name='filter')
+        conv = tf.nn.conv2d(conv1_1, kernel, [1, 1, 1, 1], padding='SAME')
+        biases = tf.Variable(tf.constant(0.0, shape=[64], dtype=tf.float32),
+                             trainable=True, name='biases')
+        out = tf.nn.bias_add(conv, biases)
+        conv1_2 = tf.nn.relu(out, name=scope)
+
+    # pool1
+    pool1 = tf.nn.max_pool(conv1_2,
+                           ksize=[1, 2, 2, 1],
+                           strides=[1, 2, 2, 1],
+                           padding='SAME',
+                           name='pool1')
+
+    # conv2_1
+    with tf.name_scope('conv2_1') as scope:
+        kernel = tf.Variable(tf.truncated_normal([3, 3, 64, 128], dtype=tf.float32,
+                                                 stddev=1e-1), name='filter')
+        conv = tf.nn.conv2d(pool1, kernel, [1, 1, 1, 1], padding='SAME')
+        biases = tf.Variable(tf.constant(0.0, shape=[128], dtype=tf.float32),
+                             trainable=True, name='biases')
+        out = tf.nn.bias_add(conv, biases)
+        conv2_1 = tf.nn.relu(out, name=scope)
+
+    # conv2_2
+    with tf.name_scope('conv2_2') as scope:
+        kernel = tf.Variable(tf.truncated_normal([3, 3, 128, 128], dtype=tf.float32,
+                                                 stddev=1e-1), name='filter')
+        conv = tf.nn.conv2d(conv2_1, kernel, [1, 1, 1, 1], padding='SAME')
+        biases = tf.Variable(tf.constant(0.0, shape=[128], dtype=tf.float32),
+                             trainable=True, name='biases')
+        out = tf.nn.bias_add(conv, biases)
+        conv2_2 = tf.nn.relu(out, name=scope)
+
+    # pool2
+    pool2 = tf.nn.max_pool(conv2_2,
+                           ksize=[1, 2, 2, 1],
+                           strides=[1, 2, 2, 1],
+                           padding='SAME',
+                           name='pool2')
+
+    # conv3_1
+    with tf.name_scope('conv3_1') as scope:
+        kernel = tf.Variable(tf.truncated_normal([3, 3, 128, 256], dtype=tf.float32,
+                                                 stddev=1e-1), name='filter')
+        conv = tf.nn.conv2d(pool2, kernel, [1, 1, 1, 1], padding='SAME')
+        biases = tf.Variable(tf.constant(0.0, shape=[256], dtype=tf.float32),
+                             trainable=True, name='biases')
+        out = tf.nn.bias_add(conv, biases)
+        conv3_1 = tf.nn.relu(out, name=scope)
+
+    # conv3_2
+    with tf.name_scope('conv3_2') as scope:
+        kernel = tf.Variable(tf.truncated_normal([3, 3, 256, 256], dtype=tf.float32,
+                                                 stddev=1e-1), name='filter')
+        conv = tf.nn.conv2d(conv3_1, kernel, [1, 1, 1, 1], padding='SAME')
+        biases = tf.Variable(tf.constant(0.0, shape=[256], dtype=tf.float32),
+                             trainable=True, name='biases')
+        out = tf.nn.bias_add(conv, biases)
+        conv3_2 = tf.nn.relu(out, name=scope)
+
+    # conv3_3
+    with tf.name_scope('conv3_3') as scope:
+        kernel = tf.Variable(tf.truncated_normal([3, 3, 256, 256], dtype=tf.float32,
+                                                 stddev=1e-1), name='filter')
+        conv = tf.nn.conv2d(conv3_2, kernel, [1, 1, 1, 1], padding='SAME')
+        biases = tf.Variable(tf.constant(0.0, shape=[256], dtype=tf.float32),
+                             trainable=True, name='biases')
+        out = tf.nn.bias_add(conv, biases)
+        conv3_3 = tf.nn.relu(out, name=scope)
+
+    # pool3
+    pool3 = tf.nn.max_pool(conv3_3,
+                           ksize=[1, 2, 2, 1],
+                           strides=[1, 2, 2, 1],
+                           padding='SAME',
+                           name='pool3')
+
+    # conv4_1
+    with tf.name_scope('conv4_1') as scope:
+        kernel = tf.Variable(tf.truncated_normal([3, 3, 256, 512], dtype=tf.float32,
+                                                 stddev=1e-1), name='filter')
+        conv = tf.nn.conv2d(pool3, kernel, [1, 1, 1, 1], padding='SAME')
+        biases = tf.Variable(tf.constant(0.0, shape=[512], dtype=tf.float32),
+                             trainable=True, name='biases')
+        out = tf.nn.bias_add(conv, biases)
+        conv4_1 = tf.nn.relu(out, name=scope)
+
+    # conv4_2
+    with tf.name_scope('conv4_2') as scope:
+        kernel = tf.Variable(tf.truncated_normal([3, 3, 512, 512], dtype=tf.float32,
+                                                 stddev=1e-1), name='filter')
+        conv = tf.nn.conv2d(conv4_1, kernel, [1, 1, 1, 1], padding='SAME')
+        biases = tf.Variable(tf.constant(0.0, shape=[512], dtype=tf.float32),
+                             trainable=True, name='biases')
+        out = tf.nn.bias_add(conv, biases)
+        conv4_2 = tf.nn.relu(out, name=scope)
+
+    # conv4_3
+    with tf.name_scope('conv4_3') as scope:
+        kernel = tf.Variable(tf.truncated_normal([3, 3, 512, 512], dtype=tf.float32,
+                                                 stddev=1e-1), name='filter')
+        conv = tf.nn.conv2d(conv4_2, kernel, [1, 1, 1, 1], padding='SAME')
+        biases = tf.Variable(tf.constant(0.0, shape=[512], dtype=tf.float32),
+                             trainable=True, name='biases')
+        out = tf.nn.bias_add(conv, biases)
+        conv4_3 = tf.nn.relu(out, name=scope)
+
+    # pool4
+    pool4 = tf.nn.max_pool(conv4_3,
+                           ksize=[1, 2, 2, 1],
+                           strides=[1, 2, 2, 1],
+                           padding='SAME',
+                           name='pool4')
+
+    # conv5_1
+    with tf.name_scope('conv5_1') as scope:
+        kernel = tf.Variable(tf.truncated_normal([3, 3, 512, 512], dtype=tf.float32,
+                                                 stddev=1e-1), name='filter')
+        conv = tf.nn.conv2d(pool4, kernel, [1, 1, 1, 1], padding='SAME')
+        biases = tf.Variable(tf.constant(0.0, shape=[512], dtype=tf.float32),
+                             trainable=True, name='biases')
+        out = tf.nn.bias_add(conv, biases)
+        conv5_1 = tf.nn.relu(out, name=scope)
+
+    # conv5_2
+    with tf.name_scope('conv5_2') as scope:
+        kernel = tf.Variable(tf.truncated_normal([3, 3, 512, 512], dtype=tf.float32,
+                                                 stddev=1e-1), name='filter')
+        conv = tf.nn.conv2d(conv5_1, kernel, [1, 1, 1, 1], padding='SAME')
+        biases = tf.Variable(tf.constant(0.0, shape=[512], dtype=tf.float32),
+                             trainable=True, name='biases')
+        out = tf.nn.bias_add(conv, biases)
+        conv5_2 = tf.nn.relu(out, name=scope)
+
+    # conv5_3
+    with tf.name_scope('conv5_3') as scope:
+        kernel = tf.Variable(tf.truncated_normal([3, 3, 512, 512], dtype=tf.float32,
+                                                 stddev=1e-1), name='filter')
+        conv = tf.nn.conv2d(conv5_2, kernel, [1, 1, 1, 1], padding='SAME')
+        biases = tf.Variable(tf.constant(0.0, shape=[512], dtype=tf.float32),
+                             trainable=True, name='biases')
+        out = tf.nn.bias_add(conv, biases)
+        conv5_3 = tf.nn.relu(out, name=scope)
+
+    # pool5
+    pool5 = tf.nn.max_pool(conv5_3,
+                           ksize=[1, 2, 2, 1],
+                           strides=[1, 2, 2, 1],
+                           padding='SAME',
+                           name='pool5')
+    return pool5, image_input
+
+def deconv(bottom):
+    graph = tf.get_default_graph()
+    layer3 = graph.get_tensor_by_name('pool3:0')
+    layer4 = graph.get_tensor_by_name('pool4:0')
+    scaled3 = tf.multiply(layer3, 0.0001, name='vgg_layer3_out_scaled')
+    scaled4 = tf.multiply(layer4, 0.01, name='vgg_layer4_out_scaled')
 
     weights_initializer_stddev = 0.01
     weights_regularized_l2 = 1e-3
     # Convolutional 1x1 to mantain space information.
-    conv_1x1_of_7 = tf.layers.conv2d(vgg_layer7_out,
-                                     num_classes,
+    conv_1x1_of_7 = tf.layers.conv2d(bottom,
+                                     NUMBER_OF_CLASSES,
                                      1, # kernel_size
                                      padding = 'same',
                                      kernel_initializer = tf.random_normal_initializer(stddev=weights_initializer_stddev),
@@ -68,7 +266,7 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
                                      name='conv_1x1_of_7')
     # Upsample deconvolution x 2
     first_upsamplex2 = tf.layers.conv2d_transpose(conv_1x1_of_7,
-                                                  num_classes,
+                                                  NUMBER_OF_CLASSES,
                                                   4, # kernel_size
                                                   strides= (2, 2),
                                                   padding= 'same',
@@ -76,7 +274,7 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
                                                   kernel_regularizer= tf.contrib.layers.l2_regularizer(weights_regularized_l2),
                                                   name='first_upsamplex2')
     conv_1x1_of_4 = tf.layers.conv2d(scaled4,
-                                     num_classes,
+                                     NUMBER_OF_CLASSES,
                                      1, # kernel_size
                                      padding = 'same',
                                      kernel_initializer = tf.random_normal_initializer(stddev=weights_initializer_stddev),
@@ -93,7 +291,7 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     )
     # Upsample deconvolutions x 2.
     second_upsamplex2 = tf.layers.conv2d_transpose(first_skip,
-                                                   num_classes,
+                                                   NUMBER_OF_CLASSES,
                                                    4, # kernel_size
                                                    strides= (2, 2),
                                                    padding= 'same',
@@ -101,7 +299,7 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
                                                    kernel_regularizer= tf.contrib.layers.l2_regularizer(weights_regularized_l2),
                                                    name='second_upsamplex2')
     conv_1x1_of_3 = tf.layers.conv2d(scaled3,
-                                     num_classes,
+                                     NUMBER_OF_CLASSES,
                                      1, # kernel_size
                                      padding = 'same',
                                      kernel_initializer = tf.random_normal_initializer(stddev=weights_initializer_stddev),
@@ -117,7 +315,7 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
             name='second_skip'
     )
     # Upsample deconvolution x 8.
-    third_upsamplex8 = tf.layers.conv2d_transpose(second_skip, num_classes, 16,
+    third_upsamplex8 = tf.layers.conv2d_transpose(second_skip, NUMBER_OF_CLASSES, 16,
                                                   strides= (8, 8),
                                                   padding= 'same',
                                                   kernel_initializer = tf.random_normal_initializer(stddev=weights_initializer_stddev),
@@ -125,6 +323,11 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
                                                   name='third_upsamplex8')
 
     return third_upsamplex8
+
+def vgg16_fcn():
+    pool5, image_input = convlayers()
+    fcn7 = fcn(pool5)
+    return deconv(fcn7), keep_prob, image_input
 
 def optimize(nn_last_layer, correct_label, learning_rate, num_classes):
 
@@ -193,10 +396,8 @@ import helper
 
 def test():
     with tf.Session() as sess:
-        image_input, keep_prob, layer3, layer4, layer7 = load_vgg(sess, vgg_path)
-
         # The resulting network architecture from adding a decoder on top of the given vgg model
-        model_output = layers(layer3, layer4, layer7, NUMBER_OF_CLASSES)
+        model_output, keep_prob, image_input = vgg16_fcn()
 
         # Returns the output logits, training operation and cost operation to be used
         # - logits: each row represents a pixel, each column a class
@@ -206,9 +407,8 @@ def test():
 
         saver = tf.train.Saver()
 
-        saver.restore(sess, runs_dir + '/model.ckpt')
-
-        helper.save_inference_samples(runs_dir, training_dir, sess, IMAGE_SHAPE, logits, keep_prob, image_input)
+        saver.restore(sess, os.path.join(runs_dir, 'curtrain', 'model.ckpt'))
+        # helper.save_inference_samples(runs_dir, training_dir, sess, IMAGE_SHAPE, logits, keep_prob, image_input)
 
         print("All done!")
 
@@ -221,8 +421,7 @@ def run():
   get_batches_fn = helper.gen_batch_function(training_dir, IMAGE_SHAPE)
 
   with tf.Session() as session:
-
-    # Returns the three layers, keep probability and input layer from the vgg architecture
+     # Returns the three layers, keep probability and input layer from the vgg architecture
     image_input, keep_prob, layer3, layer4, layer7 = load_vgg(session, vgg_path)
 
     # The resulting network architecture from adding a decoder on top of the given vgg model
@@ -262,6 +461,6 @@ def data():
 # MAIN
 #--------------------------
 if __name__ == '__main__':
-    # test()
-    run()
+    test()
+    #run()
     # data()
