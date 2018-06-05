@@ -7,7 +7,6 @@ import numpy as np
 import tensorflow as tf
 import time
 import os
-from PIL import Image
 import matplotlib.pyplot as plt
 
 DIVIDER = "============="
@@ -15,8 +14,9 @@ DIVIDER = "============="
 # Tune these parameters
 
 NUMBER_OF_CLASSES = 3
+LOSSES_COLLECTION = "_losses"
 IMAGE_SHAPE = (600, 800)
-EPOCHS = 40
+EPOCHS = 1
 BATCH_SIZE = 10
 DROPOUT = 0.75
 SAVE_INTERVAL = BATCH_SIZE * 50
@@ -59,7 +59,8 @@ def fcn(bottom):
     with tf.name_scope('fc6') as scope:
         kernel = tf.Variable(tf.truncated_normal([7, 7, 512, 4096], dtype=tf.float32,
                                                  stddev=1e-1), name='weights')
-        tf.nn.l2_loss(kernel)
+        loss = tf.nn.l2_loss(kernel)
+        tf.add_to_collection(LOSSES_COLLECTION, loss)
         conv = tf.nn.conv2d(bottom, kernel, [1, 1, 1, 1], padding='SAME')
         biases = tf.Variable(tf.constant(0.0, shape=[4096], dtype=tf.float32),
                              trainable=True, name='biases')
@@ -70,7 +71,8 @@ def fcn(bottom):
     with tf.name_scope('fc7') as scope:
         kernel = tf.Variable(tf.truncated_normal([1, 1, 4096, 4096], dtype=tf.float32,
                                                  stddev=1e-1), name='weights')
-        tf.nn.l2_loss(kernel)
+        loss = tf.nn.l2_loss(kernel)
+        tf.add_to_collection(LOSSES_COLLECTION, loss)
         conv = tf.nn.conv2d(fcn6, kernel, [1, 1, 1, 1], padding='SAME')
         biases = tf.Variable(tf.constant(0.0, shape=[4096], dtype=tf.float32),
                              trainable=True, name='biases')
@@ -257,29 +259,36 @@ def deconv(bottom):
     weights_initializer_stddev = 0.01
     weights_regularized_l2 = 1e-3
     # Convolutional 1x1 to mantain space information.
+    regularizer = tf.contrib.layers.l2_regularizer(weights_regularized_l2)
     conv_1x1_of_7 = tf.layers.conv2d(bottom,
                                      NUMBER_OF_CLASSES,
                                      1, # kernel_size
                                      padding = 'same',
                                      kernel_initializer = tf.random_normal_initializer(stddev=weights_initializer_stddev),
-                                     kernel_regularizer= tf.contrib.layers.l2_regularizer(weights_regularized_l2),
+                                     kernel_regularizer= regularizer,
                                      name='conv_1x1_of_7')
+    tf.add_to_collection(LOSSES_COLLECTION, regularizer)
     # Upsample deconvolution x 2
+    regularizer = tf.contrib.layers.l2_regularizer(weights_regularized_l2)
     first_upsamplex2 = tf.layers.conv2d_transpose(conv_1x1_of_7,
                                                   NUMBER_OF_CLASSES,
                                                   4, # kernel_size
                                                   strides= (2, 2),
                                                   padding= 'same',
                                                   kernel_initializer = tf.random_normal_initializer(stddev=weights_initializer_stddev),
-                                                  kernel_regularizer= tf.contrib.layers.l2_regularizer(weights_regularized_l2),
+                                                  kernel_regularizer= regularizer,
                                                   name='first_upsamplex2')
+    tf.add_to_collection(LOSSES_COLLECTION, regularizer)
+
+    regularizer = tf.contrib.layers.l2_regularizer(weights_regularized_l2)
     conv_1x1_of_4 = tf.layers.conv2d(scaled4,
                                      NUMBER_OF_CLASSES,
                                      1, # kernel_size
                                      padding = 'same',
                                      kernel_initializer = tf.random_normal_initializer(stddev=weights_initializer_stddev),
-                                     kernel_regularizer= tf.contrib.layers.l2_regularizer(weights_regularized_l2),
+                                     kernel_regularizer= regularizer,
                                      name='conv_1x1_of_4')
+    tf.add_to_collection(LOSSES_COLLECTION, regularizer)
 
     s1 = tf.shape(conv_1x1_of_4)
     s2 = tf.shape(first_upsamplex2)
@@ -290,21 +299,26 @@ def deconv(bottom):
             name='first_skip'
     )
     # Upsample deconvolutions x 2.
+    regularizer = tf.contrib.layers.l2_regularizer(weights_regularized_l2)
     second_upsamplex2 = tf.layers.conv2d_transpose(first_skip,
                                                    NUMBER_OF_CLASSES,
                                                    4, # kernel_size
                                                    strides= (2, 2),
                                                    padding= 'same',
                                                    kernel_initializer = tf.random_normal_initializer(stddev=weights_initializer_stddev),
-                                                   kernel_regularizer= tf.contrib.layers.l2_regularizer(weights_regularized_l2),
+                                                   kernel_regularizer= regularizer,
                                                    name='second_upsamplex2')
+    tf.add_to_collection(LOSSES_COLLECTION, regularizer)
+
+    regularizer = tf.contrib.layers.l2_regularizer(weights_regularized_l2)
     conv_1x1_of_3 = tf.layers.conv2d(scaled3,
                                      NUMBER_OF_CLASSES,
                                      1, # kernel_size
                                      padding = 'same',
                                      kernel_initializer = tf.random_normal_initializer(stddev=weights_initializer_stddev),
-                                     kernel_regularizer= tf.contrib.layers.l2_regularizer(weights_regularized_l2),
+                                     kernel_regularizer = regularizer,
                                      name='conv_1x1_of_3')
+    tf.add_to_collection(LOSSES_COLLECTION, regularizer)
 
     s1 = tf.shape(conv_1x1_of_3)
     s2 = tf.shape(second_upsamplex2)
@@ -315,12 +329,14 @@ def deconv(bottom):
             name='second_skip'
     )
     # Upsample deconvolution x 8.
+    regularizer = tf.contrib.layers.l2_regularizer(weights_regularized_l2)
     third_upsamplex8 = tf.layers.conv2d_transpose(second_skip, NUMBER_OF_CLASSES, 16,
                                                   strides= (8, 8),
                                                   padding= 'same',
                                                   kernel_initializer = tf.random_normal_initializer(stddev=weights_initializer_stddev),
-                                                  kernel_regularizer= tf.contrib.layers.l2_regularizer(weights_regularized_l2),
+                                                  kernel_regularizer= regularizer,
                                                   name='third_upsamplex8')
+    tf.add_to_collection(LOSSES_COLLECTION, regularizer)
 
     return third_upsamplex8
 
@@ -339,6 +355,7 @@ def optimize(nn_last_layer, correct_label, learning_rate, num_classes):
   cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits, labels=correct_label_reshaped)
   # Take mean for total loss
   loss_op = tf.reduce_mean(cross_entropy, name="fcn_loss")
+  loss_op += tf.losses.get_regularization_loss()
 
   # The model implements this operation to find the weights/parameters that would yield correct pixel labels
   train_op = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(loss_op, name="fcn_train_op")
@@ -421,11 +438,9 @@ def run():
   get_batches_fn = helper.gen_batch_function(training_dir, IMAGE_SHAPE)
 
   with tf.Session() as session:
-     # Returns the three layers, keep probability and input layer from the vgg architecture
-    image_input, keep_prob, layer3, layer4, layer7 = load_vgg(session, vgg_path)
+    model_output, keep_prob, image_input = vgg16_fcn()
 
-    # The resulting network architecture from adding a decoder on top of the given vgg model
-    model_output = layers(layer3, layer4, layer7, NUMBER_OF_CLASSES)
+    tf.saved_model.loader.load(session, ['vgg16'], vgg_path)
 
     # Returns the output logits, training operation and cost operation to be used
     # - logits: each row represents a pixel, each column a class
@@ -461,6 +476,5 @@ def data():
 # MAIN
 #--------------------------
 if __name__ == '__main__':
-    test()
-    #run()
-    # data()
+    # test()
+    run()
